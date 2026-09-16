@@ -1,0 +1,13 @@
+{
+  "name": "gpu-monitor-graphs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local tooling for the GPU telemetry graph viewer (docs/index.html)",
+  "scripts": {
+    "copy-logs": "./copy-logs.sh",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "uplot": "^1.6.32"
+  }
+}
