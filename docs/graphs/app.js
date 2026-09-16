@@ -24,8 +24,15 @@ function setStatus(text, isError) {
 }
 
 function parseTimestamp(ts) {
-  // nvidia-smi format: "2026-09-16 14:23:01.123", logged in the GPU service's TZ.
-  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?$/.exec(ts.trim());
+  // Two historical formats from nvidia-smi:
+  //   ISO-8601 with offset: "2026-07-28T17:02:17-04:00" (July 28-30 logs)
+  //   Space-separated local: "2026-09-16 14:23:01.123" (Aug 3 onward)
+  const s = ts.trim();
+  if (s.includes('T')) {
+    const t = Date.parse(s);
+    return Number.isNaN(t) ? NaN : t;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?$/.exec(s);
   if (!m) return NaN;
   const ms = m[7] ? Number(m[7]) : 0;
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]),
@@ -111,24 +118,23 @@ function renderStats(data) {
   });
 }
 
-// Axes layout: 3 on the left, 3 on the right, each with its own scale group.
+// Axes layout: x (time) axis first, then y-axes grouped by scale.
 function makeAxes() {
   const mk = (side) => ({
-    size: (u, values) => values.filter((v) => v != null).length > 0
-      ? values.filter((v) => v != null).reduce((a, b) => Math.max(a, String(b).length), 0) * 7 + 10
-      : 0,
+    size: (u, values) => {
+      const vals = (values || []).filter((v) => v != null);
+      return vals.length > 0 ? vals.reduce((a, b) => Math.max(a, String(b).length), 0) * 7 + 10 : 0;
+    },
     values: (u, vals, space) => space > 40 ? vals : vals.map((v, i) => (i % 2 === 0 ? v : null)),
-    [side ? 'side' : 'side']: side,
+    side,
   });
   return [
+    {}, // x time axis: all defaults from uPlot
     Object.assign(mk(3), { scale: 'c', label: 'Temp \u00b0C', labelSize: 14, stroke: '#d62728' }),
     Object.assign(mk(3), { scale: 'pct', label: 'Utilization %', labelSize: 14, stroke: '#1f77b4' }),
     Object.assign(mk(3), { scale: 'mem', label: 'Memory MiB', labelSize: 14, stroke: '#9467bd' }),
     Object.assign(mk(1), { scale: 'w', label: 'Power W', labelSize: 14, stroke: '#ff7f0e' }),
     Object.assign(mk(1), { scale: 'clk', label: 'Clocks MHz', labelSize: 14, stroke: '#2ca02c' }),
-    Object.assign(mk(1), {
-      scale: 'clk', show: false, size: 0,
-    }),
   ];
 }
 
@@ -182,6 +188,7 @@ function makePlot(data) {
   ];
 
   const opts = {
+    ms: 1, // x values are ms-epoch; uPlot's default tzDate/fmtDate handle rendering
     width: chartEl.clientWidth,
     height: Math.max(360, window.innerHeight - chartEl.getBoundingClientRect().top - 80),
     title: 'GPU telemetry',
@@ -190,11 +197,18 @@ function makePlot(data) {
     plugins: [wheelZoomPlugin()],
     cursor: { drag: { x: true, y: false } },
     legend: { show: true },
-    tzDate: (ts) => new Date(ts * 1000),
-    fmtDate: (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`,
   };
 
   plot = new uPlot(opts, [data.times, ...data.cols], chartEl);
+
+  // Regression guard: tick labels must be formatted dates, never raw templates.
+  const badTicks = plot.axes.filter((a) => a._show !== false).filter((a) => {
+    const vals = a.values(plot, [plot.scales[a.scale].min], 0, 100, 1000);
+    return vals.some((v) => typeof v === 'string' && v.includes('{'));
+  });
+  if (badTicks.length > 0) {
+    console.error('uPlot axis tick templates not compiled:', badTicks.map((a) => a.scale));
+  }
 }
 
 async function loadSelected() {
