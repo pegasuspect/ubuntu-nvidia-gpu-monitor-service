@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPU Telemetry Viewer</title>
+  <link rel="stylesheet" href="graphs/node_modules/uplot/dist/uPlot.min.css">
+  <link rel="stylesheet" href="graphs/style.css">
+</head>
+<body>
+  <header>
+    <h1>GPU Telemetry Viewer</h1>
+    <p id="status">Loading manifest&hellip;</p>
+  </header>
+
+  <main>
+    <aside id="days-panel">
+      <h2>Days</h2>
+      <div class="day-actions">
+        <button id="select-all" type="button">Select all</button>
+        <button id="latest-only" type="button">Latest only</button>
+      </div>
+      <div id="day-list"></div>
+      <button id="load" type="button" class="primary">Load</button>
+    </aside>
+
+    <section id="chart-panel">
+      <div id="chart"></div>
+      <div id="stats"></div>
+      <div class="chart-actions">
+        <button id="reset-zoom" type="button">Reset zoom</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="graphs/node_modules/uplot/dist/uPlot.iife.min.js"></script>
+  <script src="graphs/app.js"></script>
+</body>
+</html>
