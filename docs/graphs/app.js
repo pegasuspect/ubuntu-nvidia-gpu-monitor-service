@@ -18,6 +18,18 @@ const chartEl = document.getElementById('chart');
 let plot = null;
 let manifest = [];
 
+// Raw merged data of the currently loaded day(s); stats always use this.
+let rawData = null;
+// Currently active display step in ms (null = raw 1s samples).
+let currentStepMs = null;
+// A data swap is pending on the next commit; set by refreshStep.
+let stepSwapQueued = false;
+// Base status text for the current load (day count, total samples).
+let baseStatus = '';
+
+// Display step ladder: RAW(1s) -> 5s -> 15s -> 1m -> 5m -> 15m -> 1h.
+const STEP_LADDER = [1000, 5000, 15000, 60000, 300000, 900000, 3600000];
+
 function setStatus(text, isError) {
   statusEl.textContent = text;
   statusEl.classList.toggle('error', Boolean(isError));
@@ -87,6 +99,98 @@ function mergeDays(days) {
   return { times, cols };
 }
 
+// Average raw samples into fixed-size buckets. Buckets align to step
+// boundaries and cover every bucket in the loaded span; buckets without
+// samples yield null so off/freeze gaps stay visible.
+function aggregate(data, stepMs) {
+  if (!data || data.times.length === 0) return { times: [], cols: SERIES_DEF.map(() => []) };
+
+  const times = [];
+  const cols = SERIES_DEF.map(() => []);
+
+  const firstBucket = data.times[0] - (data.times[0] % stepMs);
+  const lastBucket = data.times[data.times.length - 1] - (data.times[data.times.length - 1] % stepMs);
+
+  const sums = SERIES_DEF.map(() => 0);
+  const counts = SERIES_DEF.map(() => 0);
+  let i = 0;
+  const n = data.times.length;
+
+  for (let b = firstBucket; b <= lastBucket; b += stepMs) {
+    while (i < n && data.times[i] < b + stepMs) {
+      for (let j = 0; j < SERIES_DEF.length; j++) {
+        const v = data.cols[j][i];
+        if (v != null) {
+          sums[j] += v;
+          counts[j]++;
+        }
+      }
+      i++;
+    }
+    times.push(b + stepMs / 2); // bucket center
+    for (let j = 0; j < SERIES_DEF.length; j++) {
+      cols[j].push(counts[j] > 0 ? sums[j] / counts[j] : null);
+      sums[j] = 0;
+      counts[j] = 0;
+    }
+  }
+  return { times, cols };
+}
+
+function displayData() {
+  if (currentStepMs == null) return rawData;
+  return aggregate(rawData, currentStepMs);
+}
+
+// Smallest display step keeping visible samples at <= ~2 per pixel of width.
+// Returns null when raw 1s data already fits (raw display).
+function pickStep(visibleMs, chartWidthPx) {
+  const totalMs = rawData ? rawData.times[rawData.times.length - 1] - rawData.times[0] : 0;
+  const span = Math.min(visibleMs, totalMs);
+  if (span <= chartWidthPx * 2 * 1000) return null; // raw 1s samples fit
+  for (const step of STEP_LADDER) {
+    if (step > 1000 && span / step <= chartWidthPx * 2) return step;
+  }
+  return STEP_LADDER[STEP_LADDER.length - 1];
+}
+
+function stepLabel(stepMs) {
+  if (stepMs == null) return 'raw 1s samples';
+  if (stepMs < 60000) return `${stepMs / 1000}-sec buckets`;
+  if (stepMs < 3600000) return `${stepMs / 60000}-min buckets`;
+  return `${stepMs / 3600000}-hour buckets`;
+}
+
+function updateStatusBadge() {
+  setStatus(baseStatus + (baseStatus ? ' \u00b7 ' : '') + stepLabel(currentStepMs));
+}
+
+// Check the step ladder for the current visible range. The actual data swap is
+// deferred to a microtask AFTER the current commit finishes, then re-commits
+// explicitly: swapping inside the setScale hook leaves y-scales stale for one
+// frame (flicker), and setData(..., false) alone never queues a redraw.
+function refreshStep() {
+  if (!plot || !rawData || stepSwapQueued) return;
+  const xMin = plot.scales.x.min;
+  const xMax = plot.scales.x.max;
+  if (xMin == null || xMax == null) return;
+  const step = pickStep(xMax - xMin, chartEl.clientWidth);
+  if (step === currentStepMs) return;
+
+  stepSwapQueued = true;
+  const lo = xMin;
+  const hi = xMax;
+  queueMicrotask(() => {
+    stepSwapQueued = false;
+    if (!plot || step === currentStepMs) return; // re-check after the commit
+    currentStepMs = step;
+    const data = displayData();
+    plot.setData([data.times, ...data.cols], false); // false: keep zoom range
+    plot.setScale('x', { min: lo, max: hi }); // explicit commit: redraw with fresh y-scales
+    updateStatusBadge();
+  });
+}
+
 function computeStats(data) {
   return SERIES_DEF.map((s, j) => {
     let min = Infinity, max = -Infinity, sum = 0, n = 0;
@@ -138,7 +242,8 @@ function makeAxes() {
   ];
 }
 
-// Wheel zoom plugin (keeps x under cursor anchored), no extra deps.
+// Wheel zoom plugin: Ctrl/Cmd + scroll zooms the x-scale around the cursor,
+// keeping the cursor's relative position fixed. No extra deps.
 function wheelZoomPlugin(opts) {
   const factor = (opts && opts.factor) || 0.9;
   return {
@@ -155,13 +260,15 @@ function wheelZoomPlugin(opts) {
           if (!e.ctrlKey && !e.metaKey) return;
           e.preventDefault();
           const { x } = px(e);
-          const lft = u.posToVal(x, 'x');
-          const [min, max] = u.scales.x.range(u, u.data[0][0], u.data[0][u.data[0].length - 1]);
-          const scale = e.deltaY < 0 ? 1 / factor : factor;
-          const mid = lft;
-          const half = (max - min) / 2 * scale;
-          const lo = mid - half * ((mid - min) / (max - min) * 2);
-          const hi = lo + (max - min) * scale;
+          const min = u.scales.x.min;
+          const max = u.scales.x.max;
+          if (min == null || max == null) return;
+          const anchor = u.posToVal(x, 'x');
+          const rel = (anchor - min) / (max - min); // 0..1 position under cursor
+          // zoom-in (deltaY < 0) shrinks the span; zoom-out expands it
+          const span = (max - min) * (e.deltaY < 0 ? factor : 1 / factor);
+          const lo = anchor - rel * span;
+          const hi = lo + span;
           u.setScale('x', { min: lo, max: hi });
         }, { passive: false });
       },
@@ -175,6 +282,13 @@ function makePlot(data) {
     plot = null;
   }
 
+  rawData = data;
+  currentStepMs = pickStep(
+    data.times[data.times.length - 1] - data.times[0],
+    chartEl.clientWidth,
+  );
+  const disp = displayData();
+
   const series = [
     { label: 'time' },
     ...SERIES_DEF.map((s) => ({
@@ -184,6 +298,7 @@ function makePlot(data) {
       scale: s.scale,
       points: { show: false },
       spanGaps: false,
+      paths: uPlot.paths.spline(),
     })),
   ];
 
@@ -197,9 +312,19 @@ function makePlot(data) {
     plugins: [wheelZoomPlugin()],
     cursor: { drag: { x: true, y: false } },
     legend: { show: true },
+    hooks: {
+      setScale: [
+        (u, key) => {
+          if (key === 'x') refreshStep();
+        },
+      ],
+      ready: [
+        () => refreshStep(),
+      ],
+    },
   };
 
-  plot = new uPlot(opts, [data.times, ...data.cols], chartEl);
+  plot = new uPlot(opts, [disp.times, ...disp.cols], chartEl);
 
   // Regression guard: tick labels must be formatted dates, never raw templates.
   const badTicks = plot.axes.filter((a) => a._show !== false).filter((a) => {
@@ -232,7 +357,8 @@ async function loadSelected() {
     makePlot(data);
     renderStats(data);
     const pointCount = data.times.length;
-    setStatus(`Showing ${checked.length} day(s), ${pointCount.toLocaleString()} samples.`);
+    baseStatus = `Showing ${checked.length} day(s), ${pointCount.toLocaleString()} samples.`;
+    updateStatusBadge();
   } catch (err) {
     setStatus(`Error: ${err.message}`, true);
   }
@@ -275,10 +401,18 @@ document.getElementById('latest-only').addEventListener('click', () => {
 });
 document.getElementById('load').addEventListener('click', loadSelected);
 document.getElementById('reset-zoom').addEventListener('click', () => {
-  if (plot) plot.setScale('x', {});
+  if (plot && rawData && rawData.times.length > 0) {
+    plot.setScale('x', {
+      min: rawData.times[0],
+      max: rawData.times[rawData.times.length - 1],
+    });
+  }
 });
 window.addEventListener('resize', () => {
-  if (plot) plot.setSize({ width: chartEl.clientWidth, height: plot.height });
+  if (plot) {
+    plot.setSize({ width: chartEl.clientWidth, height: plot.height });
+    refreshStep(); // bucket density depends on chart width
+  }
 });
 
 init();
