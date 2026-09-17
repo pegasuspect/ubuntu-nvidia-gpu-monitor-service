@@ -190,7 +190,7 @@ function makePlot(data) {
   const opts = {
     ms: 1, // x values are ms-epoch; uPlot's default tzDate/fmtDate handle rendering
     width: chartEl.clientWidth,
-    height: Math.max(360, window.innerHeight - chartEl.getBoundingClientRect().top - 80),
+    height: Math.max(360, (window.innerHeight - chartEl.getBoundingClientRect().top - 80) / 2),
     title: 'GPU telemetry',
     series,
     axes: makeAxes(),
