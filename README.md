@@ -12,9 +12,9 @@ your system was frozen after a reboot.
 
 ### Analysis
 
-If you don't know how to use excel or a similar tool to draw graphs, or inspect 
-the peaks, averages, or lows, just copy the log file created by this service to 
-an LLM and it should tell you or give you the analysis you need.
+![Screenshot](docs/screenshot.png)
+
+See [docs/README.md](docs/README.md) for install and usage.
 
 ### Install
 If you run `./install.sh` after downloading this repo, the script will install a 

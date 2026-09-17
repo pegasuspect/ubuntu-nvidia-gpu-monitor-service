@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPU Telemetry Viewer</title>
+  <link rel="stylesheet" href="graphs/node_modules/uplot/dist/uPlot.min.css">
+  <link rel="stylesheet" href="graphs/node_modules/litepicker/dist/css/litepicker.css">
+  <link rel="stylesheet" href="graphs/style.css">
+</head>
+<body>
+  <header>
+    <h1>
+      GPU Telemetry Viewer
+    </h1>
+    <p> Graph usage tips:
+      <small>
+        <ol>
+          <li>
+            <code class="button">CTRL</code>/<code class="button">CMD</code> + Click on labels below the graph to isolate them.
+          </li>
+          <li>
+            <code class="button">CTRL</code>/<code class="button">CMD</code> + Scroll to Zoom in on the graph or choose a range by dragging a point on the graph.
+          </li>
+        </ol>
+      </small>
+  </p>
+    <p id="status">Loading manifest&hellip;</p>
+  </header>
+
+  <main>
+    <aside id="days-panel">
+      <h2>Date ranges</h2>
+      <div class="day-actions">
+        <button id="select-all" type="button">Select all</button>
+        <button id="latest-only" type="button">Latest only</button>
+        <button id="clear-ranges" type="button">Clear all</button>
+      </div>
+      <div id="range-picker"></div>
+      <div id="range-list"></div>
+      <button id="load" type="button" class="primary">Load</button>
+    </aside>
+
+    <section id="chart-panel">
+      <div id="chart"></div>
+      <div id="stats"></div>
+      <div class="chart-actions">
+        <button id="reset-zoom" type="button">Reset zoom</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="graphs/node_modules/uplot/dist/uPlot.iife.min.js"></script>
+  <script src="graphs/node_modules/litepicker/dist/litepicker.js"></script>
+  <script src="graphs/app.js"></script>
+</body>
+</html>
