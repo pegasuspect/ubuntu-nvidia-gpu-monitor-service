@@ -485,7 +485,13 @@ async function init() {
       throw new Error('No CSV files in manifest. Run graphs/copy-logs.sh first.');
     }
     initPicker();
-    setStatus(`${manifest.length} day(s) available. Pick ranges and press Load.`);
+    // Auto-load the latest day so the page starts with a chart, matching the
+    // "Latest only" + "Load" button sequence.
+    const last = manifest[manifest.length - 1].replace(/^gpu-test-|\.csv$/g, '');
+    ranges = [{ start: last, end: last }];
+    renderRangeList();
+    syncPicker();
+    await loadSelected();
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`, true);
