@@ -10,9 +10,9 @@ multiple smaller files are more manageable than having one giant master file. It
 is also easier to just look at current day's log file to inspect GPU levels if 
 your system was frozen after a reboot.
 
-### Analysis
+### GPU Analysis
 
-![Screenshot](docs/screenshot.png)
+[![Screenshot](docs/screenshot.png)](https://github.com/pegasuspect/ubuntu-nvidia-gpu-monitor-service/tree/main/docs)
 
 See [docs/README.md](docs/README.md) for install and usage.
 

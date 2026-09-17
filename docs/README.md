@@ -1,6 +1,6 @@
 # GPU Telemetry Graph Viewer
 
-![Screenshot](./screenshot.png)
+[![Screenshot](./screenshot.png)](https://github.com/pegasuspect/ubuntu-nvidia-gpu-monitor-service/tree/main/docs)
 
 A small vanilla-JS tool that visualizes the CSV logs produced by
 `gpu-monitor.service`. It renders one second-resolution telemetry
