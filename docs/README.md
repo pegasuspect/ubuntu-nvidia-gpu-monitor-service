@@ -1,5 +1,7 @@
 # GPU Telemetry Graph Viewer
 
+![Screenshot](./screenshot.png)
+
 A small vanilla-JS tool that visualizes the CSV logs produced by
 `gpu-monitor.service`. It renders one second-resolution telemetry
 (temperature, utilization, memory, power, and GPU/memory clocks) on an
