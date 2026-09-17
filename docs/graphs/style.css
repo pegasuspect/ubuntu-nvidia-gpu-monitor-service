@@ -45,7 +45,7 @@ main {
 }
 
 #days-panel {
-  flex: 0 0 230px;
+  flex: 0 0 302px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -59,8 +59,16 @@ main {
 
 .day-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-bottom: 8px;
+}
+
+.day-actions button {
+  flex: 1 1 auto;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  white-space: nowrap;
 }
 
 button {
@@ -87,26 +95,43 @@ button.primary {
   font-weight: 600;
 }
 
-#day-list {
-  max-height: 50vh;
-  overflow-y: auto;
+#range-picker {
+  margin-bottom: 10px;
+}
+
+#range-picker .litepicker {
+  font-family: inherit;
+}
+
+#range-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  margin-bottom: 10px;
 }
 
-#day-list label {
+.range-chip {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
-  padding: 3px 4px;
-  font-size: 0.85rem;
-  border-radius: 4px;
-  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #eef6ff;
 }
 
-#day-list label:hover {
-  background: #eef1f4;
+.range-chip button {
+  padding: 0 6px;
+  font-size: 0.8rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+}
+
+.range-chip button:hover {
+  color: #cf222e;
 }
 
 #chart-panel {

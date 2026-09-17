@@ -8,6 +8,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "litepicker": "^2.0.12",
     "uplot": "^1.6.32"
   }
 }

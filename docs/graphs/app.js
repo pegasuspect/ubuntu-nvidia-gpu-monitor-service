@@ -11,12 +11,16 @@ const SERIES_DEF = [
 ];
 
 const statusEl = document.getElementById('status');
-const dayListEl = document.getElementById('day-list');
+const rangePickerEl = document.getElementById('range-picker');
+const rangeListEl = document.getElementById('range-list');
 const statsEl = document.getElementById('stats');
 const chartEl = document.getElementById('chart');
 
 let plot = null;
 let manifest = [];
+let picker = null;
+// Selected date ranges as {start: 'YYYY-MM-DD', end: 'YYYY-MM-DD'}.
+let ranges = [];
 
 // Raw merged data of the currently loaded day(s); stats always use this.
 let rawData = null;
@@ -31,6 +35,7 @@ let baseStatus = '';
 const STEP_LADDER = [1000, 5000, 15000, 60000, 300000, 900000, 3600000];
 
 function setStatus(text, isError) {
+  isError = Boolean(isError);
   statusEl.textContent = text;
   statusEl.classList.toggle('error', Boolean(isError));
 }
@@ -337,15 +342,19 @@ function makePlot(data) {
 }
 
 async function loadSelected() {
-  const checked = [...dayListEl.querySelectorAll('input:checked')].map((i) => i.value);
-  if (checked.length === 0) {
-    setStatus('Select at least one day to load.', true);
+  if (ranges.length === 0) {
+    setStatus('Pick at least one date range to load.', true);
     return;
   }
-  setStatus(`Loading ${checked.length} day(s)\u2026`);
+  const { names, skipped } = expandRanges(ranges);
+  if (names.length === 0) {
+    setStatus('The selected range(s) contain no log files.', true);
+    return;
+  }
+  setStatus(`Loading ${names.length} day(s)\u2026`);
   try {
     const days = [];
-    for (const name of checked) {
+    for (const name of names) {
       const res = await fetch(`graphs/data/${name}`);
       if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
       const day = parseCsv(await res.text());
@@ -357,7 +366,12 @@ async function loadSelected() {
     makePlot(data);
     renderStats(data);
     const pointCount = data.times.length;
-    baseStatus = `Showing ${checked.length} day(s), ${pointCount.toLocaleString()} samples.`;
+    baseStatus = `Showing ${ranges.length} range(s), ${names.length} day(s), ${pointCount.toLocaleString()} samples.`;
+    if (skipped.length > 0) {
+      const cap = skipped.slice(0, 5).join(', ');
+      const extra = skipped.length > 5 ? `, +${skipped.length - 5} more` : '';
+      baseStatus += ` No log: ${cap}${extra}.`;
+    }
     updateStatusBadge();
   } catch (err) {
     console.error(err);
@@ -365,17 +379,100 @@ async function loadSelected() {
   }
 }
 
-function renderDayList() {
-  dayListEl.innerHTML = '';
-  manifest.forEach((name, i) => {
-    const label = document.createElement('label');
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.value = name;
-    cb.checked = i === manifest.length - 1; // default: latest day
-    label.appendChild(cb);
-    label.appendChild(document.createTextNode(name.replace(/^gpu-test-|\.csv$/g, '')));
-    dayListEl.appendChild(label);
+// ---- Date-range state & helpers ----
+
+function dayName(dateStr) {
+  return `gpu-test-${dateStr}.csv`;
+}
+
+// 'YYYY-MM-DD' day strings for a range, inclusive.
+function rangeDays(range) {
+  const out = [];
+  const d = new Date(`${range.start}T00:00:00`);
+  const end = new Date(`${range.end}T00:00:00`);
+  while (d <= end) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
+// Expand ranges into available manifest filenames, skipping days with no log.
+// Returns { names, skipped } with names sorted ascending and deduped.
+function expandRanges(rangeList) {
+  const have = new Set(manifest);
+  const names = new Set();
+  const skipped = new Set();
+  for (const r of rangeList) {
+    for (const day of rangeDays(r)) {
+      if (have.has(dayName(day))) names.add(dayName(day));
+      else skipped.add(day);
+    }
+  }
+  return {
+    names: [...names].sort(),
+    skipped: [...skipped].sort(),
+  };
+}
+
+function renderRangeList() {
+  rangeListEl.innerHTML = '';
+  ranges.forEach((r, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'range-chip';
+    const label = document.createElement('span');
+    label.textContent = r.start === r.end ? r.start : `${r.start} \u2192 ${r.end}`;
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.textContent = '\u2715';
+    del.title = 'Remove range';
+    del.addEventListener('click', () => {
+      ranges.splice(i, 1);
+      renderRangeList();
+      syncPicker();
+    });
+    chip.appendChild(label);
+    chip.appendChild(del);
+    rangeListEl.appendChild(chip);
+  });
+}
+
+// Keep the picker's highlights in sync with the committed ranges.
+function syncPicker() {
+  if (!picker) return;
+  picker.setOptions({
+    highlightedDays: ranges.map((r) => [r.start, r.end]),
+  });
+}
+
+function initPicker() {
+  const minDate = manifest[0].replace(/^gpu-test-|\.csv$/g, '');
+  const maxDate = manifest[manifest.length - 1].replace(/^gpu-test-|\.csv$/g, '');
+  const have = new Set(manifest);
+
+  picker = new Litepicker({
+    element: rangePickerEl,
+    inlineMode: true,
+    singleMode: false,
+    numberOfMonths: 1,
+    minDate,
+    maxDate,
+    lockDaysFilter: (date1, date2) => {
+      // Lock days that have no log file (e.g. days the system was off).
+      if (date1 && date2 == null) {
+        return !have.has(dayName(date1.format('YYYY-MM-DD')));
+      }
+      return false;
+    },
+    setup: (p) => {
+      p.on('selected', (start, end) => {
+        if (!start || !end) return; // wait for the range's second click
+        ranges.push({ start: start.format('YYYY-MM-DD'), end: end.format('YYYY-MM-DD') });
+        renderRangeList();
+        syncPicker();
+        p.clearSelection();
+      });
+    },
   });
 }
 
@@ -387,8 +484,8 @@ async function init() {
     if (!Array.isArray(manifest) || manifest.length === 0) {
       throw new Error('No CSV files in manifest. Run graphs/copy-logs.sh first.');
     }
-    renderDayList();
-    setStatus(`${manifest.length} day(s) available. Select and press Load.`);
+    initPicker();
+    setStatus(`${manifest.length} day(s) available. Pick ranges and press Load.`);
   } catch (err) {
     console.error(err);
     setStatus(`Error: ${err.message}`, true);
@@ -396,10 +493,24 @@ async function init() {
 }
 
 document.getElementById('select-all').addEventListener('click', () => {
-  dayListEl.querySelectorAll('input').forEach((i) => { i.checked = true; });
+  if (manifest.length === 0) return;
+  const first = manifest[0].replace(/^gpu-test-|\.csv$/g, '');
+  const last = manifest[manifest.length - 1].replace(/^gpu-test-|\.csv$/g, '');
+  ranges = [{ start: first, end: last }];
+  renderRangeList();
+  syncPicker();
 });
 document.getElementById('latest-only').addEventListener('click', () => {
-  dayListEl.querySelectorAll('input').forEach((i, _, all) => { i.checked = i === all[all.length - 1]; });
+  if (manifest.length === 0) return;
+  const last = manifest[manifest.length - 1].replace(/^gpu-test-|\.csv$/g, '');
+  ranges = [{ start: last, end: last }];
+  renderRangeList();
+  syncPicker();
+});
+document.getElementById('clear-ranges').addEventListener('click', () => {
+  ranges = [];
+  renderRangeList();
+  syncPicker();
 });
 document.getElementById('load').addEventListener('click', loadSelected);
 document.getElementById('reset-zoom').addEventListener('click', () => {

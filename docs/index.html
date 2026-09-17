@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GPU Telemetry Viewer</title>
   <link rel="stylesheet" href="graphs/node_modules/uplot/dist/uPlot.min.css">
+  <link rel="stylesheet" href="graphs/node_modules/litepicker/dist/css/litepicker.css">
   <link rel="stylesheet" href="graphs/style.css">
 </head>
 <body>
@@ -29,12 +30,14 @@
 
   <main>
     <aside id="days-panel">
-      <h2>Days</h2>
+      <h2>Date ranges</h2>
       <div class="day-actions">
         <button id="select-all" type="button">Select all</button>
         <button id="latest-only" type="button">Latest only</button>
+        <button id="clear-ranges" type="button">Clear all</button>
       </div>
-      <div id="day-list"></div>
+      <div id="range-picker"></div>
+      <div id="range-list"></div>
       <button id="load" type="button" class="primary">Load</button>
     </aside>
 
@@ -48,6 +51,7 @@
   </main>
 
   <script src="graphs/node_modules/uplot/dist/uPlot.iife.min.js"></script>
+  <script src="graphs/node_modules/litepicker/dist/litepicker.js"></script>
   <script src="graphs/app.js"></script>
 </body>
 </html>
