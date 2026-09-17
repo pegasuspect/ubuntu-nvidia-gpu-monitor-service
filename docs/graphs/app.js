@@ -360,6 +360,7 @@ async function loadSelected() {
     baseStatus = `Showing ${checked.length} day(s), ${pointCount.toLocaleString()} samples.`;
     updateStatusBadge();
   } catch (err) {
+    console.error(err);
     setStatus(`Error: ${err.message}`, true);
   }
 }
@@ -389,6 +390,7 @@ async function init() {
     renderDayList();
     setStatus(`${manifest.length} day(s) available. Select and press Load.`);
   } catch (err) {
+    console.error(err);
     setStatus(`Error: ${err.message}`, true);
   }
 }
