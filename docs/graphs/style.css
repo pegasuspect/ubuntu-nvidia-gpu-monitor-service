@@ -156,3 +156,15 @@ button.primary {
 .chart-actions {
   margin-top: 12px;
 }
+
+.button {
+  background-color: #ddd;
+  border: none;
+  color: black;
+  padding: 2px 5px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  margin: 4px 2px;
+  border-radius: 5px;
+}
